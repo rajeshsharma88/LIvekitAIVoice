@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OutboundAI — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #161b27;
+    --bg3: #1e2535;
+    --border: #2a3347;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --orange: #f97316;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --radius: 10px;
+    --sidebar: 220px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  a { color: inherit; text-decoration: none; }
+
+  /* Layout */
+  .layout { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: var(--sidebar); background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+  /* Sidebar */
+  .sidebar-logo { padding: 20px 16px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo .logo-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .sidebar-logo .logo-text { font-weight: 700; font-size: 15px; }
+  .sidebar-logo .logo-sub { font-size: 10px; color: var(--muted); }
+  .nav { padding: 8px 0; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s; color: var(--muted); font-size: 13px; }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--bg3); color: var(--accent2); border-left-color: var(--accent); }
+  .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+  .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; }
+
+  /* Header */
+  .header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--bg2); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* Content */
+  .content { padding: 24px; flex: 1; }
+
+  /* Cards */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .card-title { font-size: 13px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .card-value { font-size: 28px; font-weight: 700; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* Grid layouts */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-danger:hover { opacity: 0.85; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--bg3); color: var(--text); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-success { background: var(--green); color: white; }
+  .btn-success:hover { opacity: 0.85; }
+  .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+  /* Forms */
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+  .form-control { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 7px; padding: 9px 12px; color: var(--text); font-size: 13px; outline: none; transition: border-color 0.15s; }
+  .form-control:focus { border-color: var(--accent); }
+  textarea.form-control { resize: vertical; min-height: 100px; font-family: inherit; }
+  select.form-control { cursor: pointer; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 12px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg3); }
+  .empty-state { text-align: center; padding: 48px; color: var(--muted); }
+  .empty-state .empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .badge-purple { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .badge-orange { background: rgba(249,115,22,0.15); color: var(--orange); }
+  .badge-muted { background: var(--bg3); color: var(--muted); }
+
+  /* Section spacing */
+  .section { margin-bottom: 24px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-title { font-size: 16px; font-weight: 600; }
+
+  /* Toast */
+  #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; min-width: 260px; max-width: 360px; display: flex; gap: 10px; align-items: flex-start; animation: slideIn 0.2s ease; }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error { border-left: 3px solid var(--red); }
+  .toast.info { border-left: 3px solid var(--blue); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .toast-msg { flex: 1; font-size: 13px; }
+  .toast-close { cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; }
+
+  /* Spinner */
+  .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Tabs */
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Password field group */
+  .pw-wrap { position: relative; }
+  .pw-wrap .form-control { padding-right: 40px; }
+  .pw-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--muted); font-size: 14px; }
+
+  /* Progress bar */
+  .prog-bar { background: var(--bg3); border-radius: 4px; height: 6px; overflow: hidden; }
+  .prog-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s; }
+
+  /* Configured indicator */
+  .config-indicator { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+  .config-indicator.ok { color: var(--green); }
+  .config-indicator.missing { color: var(--red); }
+
+  /* Expand row */
+  .expand-row { background: var(--bg3); }
+  .expand-row td { padding: 16px 20px; }
+
+  /* Chart containers */
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .grid-4 { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .grid-4, .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .form-row, .form-row-3 { grid-template-columns: 1fr; }
+  }
+
+  /* Notes inline edit */
+  .notes-input { background: transparent; border: none; color: var(--text); font-size: 13px; width: 100%; outline: none; }
+  .notes-input:focus { background: var(--bg3); border-radius: 4px; padding: 2px 6px; }
+
+  /* Log level colors */
+  .log-info { color: var(--blue); }
+  .log-warning { color: var(--yellow); }
+  .log-error { color: var(--red); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">📞</div>
+      <div>
+        <div class="logo-text">OutboundAI</div>
+        <div class="logo-sub">v1.0.0</div>
+      </div>
+    </div>
+    <div class="nav">
+      <div class="nav-item active" onclick="showTab('dashboard')"><span class="icon">📊</span> Dashboard</div>
+      <div class="nav-item" onclick="showTab('single')"><span class="icon">📱</span> Single Call</div>
+      <div class="nav-item" onclick="showTab('batch')"><span class="icon">📋</span> Batch Upload</div>
+      <div class="nav-item" onclick="showTab('campaigns')"><span class="icon">🚀</span> Campaigns</div>
+      <div class="nav-item" onclick="showTab('appointments')"><span class="icon">📅</span> Appointments</div>
+      <div class="nav-item" onclick="showTab('calllogs')"><span class="icon">📞</span> Call Logs</div>
+      <div class="nav-item" onclick="showTab('crm')"><span class="icon">👥</span> CRM</div>
+      <div class="nav-item" onclick="showTab('profiles')"><span class="icon">🤖</span> Agent Profiles</div>
+      <div class="nav-item" onclick="showTab('prompt')"><span class="icon">💬</span> AI Prompt</div>
+      <div class="nav-item" onclick="showTab('settings')"><span class="icon">⚙️</span> Settings</div>
+      <div class="nav-item" onclick="showTab('logs')"><span class="icon">📄</span> Live Logs</div>
+    </div>
+    <div class="sidebar-footer">
+      <div style="font-size:12px;color:var(--muted);display:flex;align-items:center;">
+        <span class="health-dot" id="health-dot"></span>
+        <span id="health-label">Checking...</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="header">
+      <h1 id="page-title">Dashboard</h1>
+      <div class="header-actions">
+        <button class="btn btn-ghost btn-sm" onclick="refreshCurrent()">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <div id="tab-dashboard" class="tab-content active">
+        <div class="section">
+          <div class="grid-4" id="stats-cards">
+            <div class="card"><div class="card-title">Total Calls</div><div class="card-value" id="s-total">—</div><div class="card-sub">All time</div></div>
+            <div class="card"><div class="card-title">Booked</div><div class="card-value" id="s-booked" style="color:var(--green)">—</div><div class="card-sub">Appointments confirmed</div></div>
+            <div class="card"><div class="card-title">Booking Rate</div><div class="card-value" id="s-rate">—</div><div class="card-sub">% calls converted</div></div>
+            <div class="card"><div class="card-title">Avg Duration</div><div class="card-value" id="s-dur">—</div><div class="card-sub">seconds per call</div></div>
+          </div>
+        </div>
+        <div class="section grid-2">
+          <div class="card">
+            <div class="card-title" style="margin-bottom:16px;">Calls — Last 14 Days</div>
+            <div class="chart-wrap"><canvas id="chart-timeline"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title" style="margin-bottom:16px;">Outcome Breakdown</div>
+            <div class="chart-wrap"><canvas id="chart-outcomes"></canvas></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="card">
+            <div class="section-header">
+              <span class="section-title">Recent Calls</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Phone</th><th>Lead</th><th>Outcome</th><th>Duration</th><th>Time</th></tr></thead>
+                <tbody id="recent-calls-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SINGLE CALL -->
+      <div id="tab-single" class="tab-content">
+        <div class="card" style="max-width:540px;">
+          <div class="section-title" style="margin-bottom:20px;">Dispatch Single Call</div>
+          <div class="form-row">
+            <div class="form-group"><label>Phone Number *</label><input class="form-control" id="sc-phone" placeholder="+919876543210" /></div>
+            <div class="form-group"><label>Lead Name</label><input class="form-control" id="sc-name" placeholder="Rahul Sharma" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Business Name</label><input class="form-control" id="sc-biz" placeholder="Acme Corp" /></div>
+            <div class="form-group"><label>Service Type</label><input class="form-control" id="sc-svc" placeholder="dental checkup" /></div>
+          </div>
+          <div class="form-group"><label>Custom System Prompt (optional)</label><textarea class="form-control" id="sc-prompt" placeholder="Leave blank to use default AI prompt..."></textarea></div>
+          <button class="btn btn-primary" id="sc-btn" onclick="singleCall()">📞 Call Now</button>
+          <div id="sc-result" style="margin-top:16px;"></div>
+        </div>
+      </div>
+
+      <!-- BATCH UPLOAD -->
+      <div id="tab-batch" class="tab-content">
+        <div class="grid-2">
+          <div class="card">
+            <div class="section-title" style="margin-bottom:16px;">Paste JSON Contacts</div>
+            <div class="form-group"><label>Contacts JSON Array</label><textarea class="form-control" id="batch-json" style="min-height:160px;font-family:monospace;font-size:12px;" placeholder='[{"phone":"+919876543210","name":"Rahul"},{"phone":"+918765432109","name":"Priya"}]'></textarea></div>
+            <div class="form-row">
+              <div class="form-group"><label>Business Name</label><input class="form-control" id="batch-biz" placeholder="Acme Corp" /></div>
+              <div class="form-group"><label>Service Type</label><input class="form-control" id="batch-svc" placeholder="consultation" /></div>
+            </div>
+            <div class="form-group"><label>Delay Between Calls (seconds)</label><input class="form-control" id="batch-delay" type="number" value="3" min="0" /></div>
+            <button class="btn btn-primary" onclick="batchCall()">🚀 Start Batch Calls</button>
+          </div>
+          <div class="card">
+            <div class="section-title" style="margin-bottom:16px;">Upload CSV File</div>
+            <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">CSV must have columns: <code>phone</code>, <code>name</code> (or Phone, Name)</p>
+            <div class="form-group"><label>CSV File</label><input type="file" id="csv-file" accept=".csv" class="form-control" /></div>
+            <div class="form-row">
+              <div class="form-group"><label>Business Name</label><input class="form-control" id="csv-biz" placeholder="Acme Corp" /></div>
+              <div class="form-group"><label>Service Type</label><input class="form-control" id="csv-svc" placeholder="consultation" /></div>
+            </div>
+            <div class="form-group"><label>Delay Between Calls (seconds)</label><input class="form-control" id="csv-delay" type="number" value="3" min="0" /></div>
+            <button class="btn btn-primary" onclick="csvCall()">📤 Upload & Call</button>
+          </div>
+        </div>
+        <div id="batch-results" style="margin-top:16px;"></div>
+      </div>
+
+      <!-- CAMPAIGNS -->
+      <div id="tab-campaigns" class="tab-content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Campaigns</span>
+            <button class="btn btn-primary btn-sm" onclick="toggleCreateCampaign()">+ New Campaign</button>
+          </div>
+          <div id="create-campaign-form" class="card" style="display:none;margin-bottom:16px;">
+            <div class="section-title" style="margin-bottom:16px;">New Campaign</div>
+            <div class="form-row">
+              <div class="form-group"><label>Campaign Name *</label><input class="form-control" id="camp-name" placeholder="Q2 Dental Outreach" /></div>
+              <div class="form-group"><label>Schedule Type</label>
+                <select class="form-control" id="camp-stype">
+                  <option value="once">Run Once</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekdays">Weekdays (Mon-Fri)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Schedule Time (HH:MM)</label><input class="form-control" id="camp-stime" placeholder="09:00" value="09:00" /></div>
+              <div class="form-group"><label>Delay Between Calls (sec)</label><input class="form-control" id="camp-delay" type="number" value="3" min="0" /></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Business Name</label><input class="form-control" id="camp-biz" placeholder="Acme Corp" /></div>
+              <div class="form-group"><label>Service Type</label><input class="form-control" id="camp-svc" placeholder="consultation" /></div>
+            </div>
+            <div class="form-group"><label>Contacts (JSON Array)</label><textarea class="form-control" id="camp-contacts" style="min-height:100px;font-family:monospace;font-size:12px;" placeholder='[{"phone":"+919876543210","name":"Rahul"}]'></textarea></div>
+            <div class="form-group"><label>Custom System Prompt (optional)</label><textarea class="form-control" id="camp-prompt" placeholder="Leave blank to use default..."></textarea></div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" onclick="createCampaign()">Create Campaign</button>
+              <button class="btn btn-ghost" onclick="toggleCreateCampaign()">Cancel</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Status</th><th>Schedule</th><th>Contacts</th><th>Dispatched</th><th>Last Run</th><th>Actions</th></tr></thead>
+                <tbody id="campaigns-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- APPOINTMENTS -->
+      <div id="tab-appointments" class="tab-content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Appointments</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="date" class="form-control" id="appt-date-filter" style="width:auto;" onchange="loadAppointments()" />
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('appt-date-filter').value='';loadAppointments()">Clear</button>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:16px;">
+            <div class="section-title" style="margin-bottom:16px;">Book Appointment Manually</div>
+            <div class="form-row-3">
+              <div class="form-group"><label>Name *</label><input class="form-control" id="na-name" placeholder="Rahul Sharma" /></div>
+              <div class="form-group"><label>Phone *</label><input class="form-control" id="na-phone" placeholder="+919876543210" /></div>
+              <div class="form-group"><label>Service *</label><input class="form-control" id="na-svc" placeholder="Dental checkup" /></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Date *</label><input class="form-control" type="date" id="na-date" /></div>
+              <div class="form-group"><label>Time *</label><input class="form-control" type="time" id="na-time" /></div>
+            </div>
+            <button class="btn btn-primary" onclick="createAppointment()">+ Add Appointment</button>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Phone</th><th>Service</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="appointments-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CALL LOGS -->
+      <div id="tab-calllogs" class="tab-content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Call Logs</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span id="cl-page-info" style="color:var(--muted);font-size:12px;"></span>
+              <button class="btn btn-ghost btn-sm" onclick="clPage(-1)">&#8249; Prev</button>
+              <button class="btn btn-ghost btn-sm" onclick="clPage(1)">Next &#8250;</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Phone</th><th>Lead</th><th>Outcome</th><th>Duration</th><th>Timestamp</th><th>Notes</th></tr></thead>
+                <tbody id="calls-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CRM -->
+      <div id="tab-crm" class="tab-content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Contact CRM</span>
+            <input class="form-control" id="crm-search" placeholder="Search..." style="width:220px;" oninput="filterCRM()" />
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Phone</th><th>Name</th><th>Total Calls</th><th>Booked</th><th>Last Outcome</th><th>Last Call</th><th></th></tr></thead>
+                <tbody id="crm-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AGENT PROFILES -->
+      <div id="tab-profiles" class="tab-content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Agent Profiles</span>
+            <button class="btn btn-primary btn-sm" onclick="toggleProfileForm()">+ New Profile</button>
+          </div>
+          <div id="profile-form" class="card" style="display:none;margin-bottom:16px;">
+            <div class="section-title" style="margin-bottom:16px;" id="profile-form-title">New Agent Profile</div>
+            <input type="hidden" id="pf-id" />
+            <div class="form-row">
+              <div class="form-group"><label>Profile Name *</label><input class="form-control" id="pf-name" placeholder="Hindi Sales Agent" /></div>
+              <div class="form-group"><label>Voice</label>
+                <select class="form-control" id="pf-voice">
+                  <option value="Aoede">Aoede (Default)</option>
+                  <option value="Charon">Charon</option>
+                  <option value="Fenrir">Fenrir</option>
+                  <option value="Kore">Kore</option>
+                  <option value="Puck">Puck</option>
+                  <option value="Orbit">Orbit</option>
+                  <option value="Zephyr">Zephyr</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group"><label>Model</label>
+              <select class="form-control" id="pf-model">
+                <option value="gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview</option>
+                <option value="gemini-2.0-flash-live-preview">gemini-2.0-flash-live-preview</option>
+                <option value="gemini-2.5-flash-preview-native-audio-dialog">gemini-2.5-flash-preview-native-audio</option>
+              </select>
+            </div>
+            <div class="form-group"><label>System Prompt (optional)</label><textarea class="form-control" id="pf-prompt" style="min-height:120px;" placeholder="Leave blank to use global default prompt..."></textarea></div>
+            <div class="form-group"><label>Enabled Tools</label>
+              <div id="pf-tools" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="check_availability" checked /> check_availability</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="book_appointment" checked /> book_appointment</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="end_call" checked /> end_call</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="transfer_to_human" checked /> transfer_to_human</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="send_sms_confirmation" checked /> send_sms_confirmation</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="lookup_contact" checked /> lookup_contact</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="remember_details" checked /> remember_details</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="book_calcom" /> book_calcom</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="cancel_calcom" /> cancel_calcom</label>
+              </div>
+            </div>
+            <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="pf-default" /> Set as Default Profile</label></div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
+              <button class="btn btn-ghost" onclick="toggleProfileForm()">Cancel</button>
+            </div>
+          </div>
+          <div id="profiles-list"></div>
+        </div>
+      </div>
+
+      <!-- AI PROMPT -->
+      <div id="tab-prompt" class="tab-content">
+        <div class="card">
+          <div class="section-header">
+            <span class="section-title">System Prompt</span>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="resetPrompt()">Reset to Default</button>
+              <button class="btn btn-primary" onclick="savePrompt()">Save Prompt</button>
+            </div>
+          </div>
+          <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">Variables: <code>{lead_name}</code> <code>{business_name}</code> <code>{service_type}</code></p>
+          <div id="prompt-custom-badge" style="display:none;margin-bottom:10px;"><span class="badge badge-purple">Custom prompt active</span></div>
+          <textarea class="form-control" id="prompt-editor" style="min-height:460px;font-family:monospace;font-size:12px;line-height:1.6;"></textarea>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div id="tab-settings" class="tab-content">
+        <div class="card">
+          <div class="section-header">
+            <span class="section-title">Configuration</span>
+            <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+          </div>
+          <div id="settings-form"></div>
+        </div>
+      </div>
+
+      <!-- LIVE LOGS -->
+      <div id="tab-logs" class="tab-content">
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Activity Logs</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select class="form-control" id="log-level-filter" style="width:auto;" onchange="loadLogs()">
+                <option value="">All Levels</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+              </select>
+              <select class="form-control" id="log-source-filter" style="width:auto;" onchange="loadLogs()">
+                <option value="">All Sources</option>
+                <option value="agent">Agent</option>
+                <option value="server">Server</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="loadLogs()">↻ Refresh</button>
+              <button class="btn btn-danger btn-sm" onclick="clearLogs()">Clear All</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Time</th><th>Source</th><th>Level</th><th>Message</th><th>Detail</th></tr></thead>
+                <tbody id="logs-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let currentTab = 'dashboard';
+let clCurrentPage = 1;
+let allContacts = [];
+let chartTimeline = null;
+let chartOutcomes = null;
+let refreshTimer = null;
+
+// ─────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<div class="toast-msg">${msg}</div><div class="toast-close" onclick="this.parentElement.remove()">×</div>`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  if (loading) {
+    btn._orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span>';
+    btn.disabled = true;
+  } else {
+    btn.innerHTML = btn._orig || btn.innerHTML;
+    btn.disabled = false;
+  }
+}
+
+function outcomeBadge(outcome) {
+  const map = {
+    booked: 'badge-green',
+    not_interested: 'badge-red',
+    voicemail: 'badge-yellow',
+    no_answer: 'badge-orange',
+    wrong_number: 'badge-muted',
+    callback_requested: 'badge-blue',
+    transferred: 'badge-purple',
+  };
+  return `<span class="badge ${map[outcome] || 'badge-muted'}">${outcome || '—'}</span>`;
+}
+
+function statusBadge(status) {
+  const map = { active: 'badge-green', paused: 'badge-yellow', completed: 'badge-blue', cancelled: 'badge-red', booked: 'badge-green', cancelled: 'badge-red' };
+  return `<span class="badge ${map[status] || 'badge-muted'}">${status || '—'}</span>`;
+}
+
+function fmtDuration(sec) {
+  if (!sec) return '—';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function fmtTime(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleString(); } catch { return ts; }
+}
+
+// ─────────────────────────────────────────────
+// Navigation
+// ─────────────────────────────────────────────
+const TAB_TITLES = {
+  dashboard: 'Dashboard', single: 'Single Call', batch: 'Batch Upload',
+  campaigns: 'Campaigns', appointments: 'Appointments', calllogs: 'Call Logs',
+  crm: 'CRM', profiles: 'Agent Profiles', prompt: 'AI Prompt',
+  settings: 'Settings', logs: 'Live Logs',
+};
+
+function showTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(el => {
+    if (el.getAttribute('onclick')?.includes(`'${tab}'`)) el.classList.add('active');
+  });
+  document.getElementById('page-title').textContent = TAB_TITLES[tab] || tab;
+  currentTab = tab;
+  loadTab(tab);
+}
+
+function loadTab(tab) {
+  switch(tab) {
+    case 'dashboard': loadDashboard(); break;
+    case 'campaigns': loadCampaigns(); break;
+    case 'appointments': loadAppointments(); break;
+    case 'calllogs': loadCallLogs(); break;
+    case 'crm': loadCRM(); break;
+    case 'profiles': loadProfiles(); break;
+    case 'prompt': loadPrompt(); break;
+    case 'settings': loadSettings(); break;
+    case 'logs': loadLogs(); break;
+  }
+}
+
+function refreshCurrent() { loadTab(currentTab); }
+
+// ─────────────────────────────────────────────
+// Health check
+// ─────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const data = await api('/api/health');
+    const dot = document.getElementById('health-dot');
+    const label = document.getElementById('health-label');
+    const cfgs = Object.values(data.config);
+    const ok = cfgs.filter(Boolean).length;
+    dot.style.background = ok > 3 ? 'var(--green)' : ok > 1 ? 'var(--yellow)' : 'var(--red)';
+    label.textContent = `${ok}/${cfgs.length} configured`;
+  } catch {
+    document.getElementById('health-dot').style.background = 'var(--red)';
+    document.getElementById('health-label').textContent = 'Server offline';
+  }
+}
+
+// ─────────────────────────────────────────────
+// Dashboard
+// ─────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const stats = await api('/api/stats');
+    document.getElementById('s-total').textContent = stats.total_calls;
+    document.getElementById('s-booked').textContent = stats.booked;
+    document.getElementById('s-rate').textContent = stats.booking_rate_percent + '%';
+    document.getElementById('s-dur').textContent = fmtDuration(Math.round(stats.avg_duration_seconds));
+    renderTimelineChart(stats.timeline || []);
+    renderOutcomesChart(stats.outcomes || {});
+  } catch(e) { toast('Failed to load stats: ' + e.message, 'error'); }
+
+  try {
+    const calls = await api('/api/calls?limit=10');
+    const tbody = document.getElementById('recent-calls-body');
+    tbody.innerHTML = (calls.calls || []).map(c => `
+      <tr>
+        <td>${c.phone_number}</td>
+        <td>${c.lead_name || '—'}</td>
+        <td>${outcomeBadge(c.outcome)}</td>
+        <td>${fmtDuration(c.duration_seconds)}</td>
+        <td>${fmtTime(c.timestamp)}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="empty-state">No calls yet</td></tr>';
+  } catch {}
+}
+
+function renderTimelineChart(timeline) {
+  const ctx = document.getElementById('chart-timeline').getContext('2d');
+  if (chartTimeline) chartTimeline.destroy();
+  chartTimeline = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: timeline.map(t => t.date.slice(5)),
+      datasets: [{ label: 'Calls', data: timeline.map(t => t.count), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.4, pointRadius: 3 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8892a4', font: { size: 10 } }, grid: { color: '#2a3347' } }, y: { ticks: { color: '#8892a4', stepSize: 1 }, grid: { color: '#2a3347' } } } }
+  });
+}
+
+function renderOutcomesChart(outcomes) {
+  const ctx = document.getElementById('chart-outcomes').getContext('2d');
+  if (chartOutcomes) chartOutcomes.destroy();
+  const keys = Object.keys(outcomes);
+  const colors = { booked: '#22c55e', not_interested: '#ef4444', voicemail: '#eab308', no_answer: '#f97316', wrong_number: '#8892a4', callback_requested: '#3b82f6' };
+  chartOutcomes = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: keys,
+      datasets: [{ data: keys.map(k => outcomes[k]), backgroundColor: keys.map(k => colors[k] || '#a855f7'), borderWidth: 2, borderColor: '#161b27' }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8892a4', font: { size: 11 } } } } }
+  });
+}
+
+// ─────────────────────────────────────────────
+// Single Call
+// ─────────────────────────────────────────────
+async function singleCall() {
+  const phone = document.getElementById('sc-phone').value.trim();
+  if (!phone) return toast('Phone number required', 'error');
+  setLoading('sc-btn', true);
+  const result = document.getElementById('sc-result');
+  result.innerHTML = '';
+  try {
+    const body = {
+      phone_number: phone,
+      lead_name: document.getElementById('sc-name').value.trim() || 'there',
+      business_name: document.getElementById('sc-biz').value.trim() || 'our company',
+      service_type: document.getElementById('sc-svc').value.trim() || 'our service',
+      system_prompt: document.getElementById('sc-prompt').value.trim() || null,
+    };
+    const data = await api('/api/call/single', { method: 'POST', body: JSON.stringify(body) });
+    toast('Call dispatched successfully!', 'success');
+    result.innerHTML = `<div class="card" style="background:var(--bg3);padding:12px 16px;"><div style="color:var(--green);font-weight:600;margin-bottom:4px;">✓ Dispatched</div><div style="font-size:12px;color:var(--muted);">Room: ${data.room}</div></div>`;
+  } catch(e) {
+    toast('Call failed: ' + e.message, 'error');
+    result.innerHTML = `<div class="card" style="background:var(--bg3);padding:12px 16px;color:var(--red);">${e.message}</div>`;
+  } finally { setLoading('sc-btn', false); }
+}
+
+// ─────────────────────────────────────────────
+// Batch Call
+// ─────────────────────────────────────────────
+async function batchCall() {
+  const raw = document.getElementById('batch-json').value.trim();
+  if (!raw) return toast('Paste JSON contacts first', 'error');
+  let contacts;
+  try { contacts = JSON.parse(raw); } catch { return toast('Invalid JSON', 'error'); }
+  if (!Array.isArray(contacts) || !contacts.length) return toast('Contacts must be a non-empty array', 'error');
+
+  const body = {
+    contacts,
+    business_name: document.getElementById('batch-biz').value.trim() || 'our company',
+    service_type: document.getElementById('batch-svc').value.trim() || 'our service',
+    call_delay_seconds: parseInt(document.getElementById('batch-delay').value) || 3,
+  };
+  document.getElementById('batch-results').innerHTML = '<div class="spinner"></div> Dispatching calls...';
+  try {
+    const data = await api('/api/call/batch', { method: 'POST', body: JSON.stringify(body) });
+    const results = data.results || [];
+    const ok = results.filter(r => r.status === 'dispatched').length;
+    const fail = results.filter(r => r.status === 'failed').length;
+    toast(`Batch done: ${ok} dispatched, ${fail} failed`, ok > 0 ? 'success' : 'error');
+    document.getElementById('batch-results').innerHTML = `
+      <div class="card">
+        <div style="margin-bottom:12px;"><span class="badge badge-green">${ok} dispatched</span> <span class="badge badge-red">${fail} failed</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Phone</th><th>Status</th><th>Error</th></tr></thead><tbody>
+          ${results.map(r => `<tr><td>${r.phone}</td><td>${statusBadge(r.status)}</td><td style="color:var(--red);font-size:12px;">${r.error || ''}</td></tr>`).join('')}
+        </tbody></table></div>
+      </div>`;
+  } catch(e) {
+    toast('Batch failed: ' + e.message, 'error');
+    document.getElementById('batch-results').innerHTML = `<div style="color:var(--red);">${e.message}</div>`;
+  }
+}
+
+async function csvCall() {
+  const fileInput = document.getElementById('csv-file');
+  if (!fileInput.files.length) return toast('Select a CSV file first', 'error');
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  const biz = document.getElementById('csv-biz').value.trim() || 'our company';
+  const svc = document.getElementById('csv-svc').value.trim() || 'our service';
+  const delay = document.getElementById('csv-delay').value || '3';
+  const url = `/api/call/csv?business_name=${encodeURIComponent(biz)}&service_type=${encodeURIComponent(svc)}&call_delay_seconds=${delay}`;
+  document.getElementById('batch-results').innerHTML = '<div class="spinner"></div> Uploading and dispatching...';
+  try {
+    const res = await fetch(url, { method: 'POST', body: formData });
+    const data = await res.json();
+    const results = data.results || [];
+    const ok = results.filter(r => r.status === 'dispatched').length;
+    const fail = results.filter(r => r.status !== 'dispatched').length;
+    toast(`CSV done: ${ok} dispatched, ${fail} failed/skipped`, 'success');
+    document.getElementById('batch-results').innerHTML = `
+      <div class="card">
+        <div style="margin-bottom:12px;"><span class="badge badge-green">${ok} dispatched</span> <span class="badge badge-red">${fail} failed</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Phone</th><th>Status</th><th>Error</th></tr></thead><tbody>
+          ${results.map(r => `<tr><td>${r.phone}</td><td>${statusBadge(r.status)}</td><td style="color:var(--red);font-size:12px;">${r.error || ''}</td></tr>`).join('')}
+        </tbody></table></div>
+      </div>`;
+  } catch(e) { toast('CSV upload failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// Campaigns
+// ─────────────────────────────────────────────
+function toggleCreateCampaign() {
+  const f = document.getElementById('create-campaign-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadCampaigns() {
+  try {
+    const data = await api('/api/campaigns');
+    const tbody = document.getElementById('campaigns-body');
+    const camps = data.campaigns || [];
+    if (!camps.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🚀</div>No campaigns yet</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = camps.map(c => {
+      let contactCount = 0;
+      try { contactCount = JSON.parse(c.contacts_json || '[]').length; } catch {}
+      return `<tr>
+        <td><strong>${c.name}</strong></td>
+        <td>${statusBadge(c.status)}</td>
+        <td><span class="badge badge-muted">${c.schedule_type}</span> ${c.schedule_time || ''}</td>
+        <td>${contactCount}</td>
+        <td>${c.total_dispatched || 0} / ${(c.total_failed || 0)} fail</td>
+        <td style="font-size:12px;color:var(--muted);">${c.last_run_at ? fmtTime(c.last_run_at) : '—'}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-primary" onclick="runCampaignNow('${c.id}')">▶ Run</button>
+          <button class="btn btn-sm btn-ghost" onclick="toggleCampaignStatus('${c.id}','${c.status === 'active' ? 'paused' : 'active'}')">${c.status === 'active' ? '⏸ Pause' : '▶ Resume'}</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCampaign('${c.id}')">✕</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { toast('Failed to load campaigns: ' + e.message, 'error'); }
+}
+
+async function createCampaign() {
+  const name = document.getElementById('camp-name').value.trim();
+  const contactsRaw = document.getElementById('camp-contacts').value.trim();
+  if (!name) return toast('Campaign name required', 'error');
+  let contacts = [];
+  try { contacts = JSON.parse(contactsRaw || '[]'); } catch { return toast('Invalid contacts JSON', 'error'); }
+  try {
+    await api('/api/campaigns', { method: 'POST', body: JSON.stringify({
+      name,
+      contacts,
+      schedule_type: document.getElementById('camp-stype').value,
+      schedule_time: document.getElementById('camp-stime').value,
+      call_delay_seconds: parseInt(document.getElementById('camp-delay').value) || 3,
+      business_name: document.getElementById('camp-biz').value.trim() || 'our company',
+      service_type: document.getElementById('camp-svc').value.trim() || 'our service',
+      system_prompt: document.getElementById('camp-prompt').value.trim() || null,
+    })});
+    toast('Campaign created!', 'success');
+    toggleCreateCampaign();
+    loadCampaigns();
+  } catch(e) { toast('Create failed: ' + e.message, 'error'); }
+}
+
+async function runCampaignNow(id) {
+  try {
+    await api(`/api/campaigns/${id}/run`, { method: 'POST' });
+    toast('Campaign started!', 'success');
+    setTimeout(loadCampaigns, 1000);
+  } catch(e) { toast('Run failed: ' + e.message, 'error'); }
+}
+
+async function toggleCampaignStatus(id, status) {
+  try {
+    await api(`/api/campaigns/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    toast(`Campaign ${status}`, 'success');
+    loadCampaigns();
+  } catch(e) { toast('Status update failed: ' + e.message, 'error'); }
+}
+
+async function deleteCampaign(id) {
+  if (!confirm('Delete this campaign?')) return;
+  try {
+    await api(`/api/campaigns/${id}`, { method: 'DELETE' });
+    toast('Campaign deleted', 'success');
+    loadCampaigns();
+  } catch(e) { toast('Delete failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// Appointments
+// ─────────────────────────────────────────────
+async function loadAppointments() {
+  try {
+    const dateFilter = document.getElementById('appt-date-filter').value;
+    const url = dateFilter ? `/api/appointments?date=${dateFilter}` : '/api/appointments';
+    const data = await api(url);
+    const tbody = document.getElementById('appointments-body');
+    const appts = data.appointments || [];
+    if (!appts.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📅</div>No appointments</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = appts.map(a => `<tr>
+      <td>${a.name}</td>
+      <td>${a.phone}</td>
+      <td>${a.service}</td>
+      <td>${a.date}</td>
+      <td>${a.time}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td>${a.status === 'booked' ? `<button class="btn btn-sm btn-danger" onclick="cancelAppointment('${a.id}')">Cancel</button>` : ''}</td>
+    </tr>`).join('');
+  } catch(e) { toast('Failed to load appointments: ' + e.message, 'error'); }
+}
+
+async function createAppointment() {
+  const name = document.getElementById('na-name').value.trim();
+  const phone = document.getElementById('na-phone').value.trim();
+  const service = document.getElementById('na-svc').value.trim();
+  const date = document.getElementById('na-date').value;
+  const time = document.getElementById('na-time').value;
+  if (!name || !phone || !service || !date || !time) return toast('All fields required', 'error');
+  try {
+    const data = await api('/api/appointments', { method: 'POST', body: JSON.stringify({ name, phone, date, time, service }) });
+    toast(`Appointment booked! ID: ${data.booking_id}`, 'success');
+    loadAppointments();
+  } catch(e) { toast('Create failed: ' + e.message, 'error'); }
+}
+
+async function cancelAppointment(id) {
+  if (!confirm('Cancel this appointment?')) return;
+  try {
+    await api(`/api/appointments/${id}`, { method: 'DELETE' });
+    toast('Appointment cancelled', 'success');
+    loadAppointments();
+  } catch(e) { toast('Cancel failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// Call Logs
+// ─────────────────────────────────────────────
+async function loadCallLogs() {
+  try {
+    const data = await api(`/api/calls?page=${clCurrentPage}&limit=20`);
+    const calls = data.calls || [];
+    document.getElementById('cl-page-info').textContent = `Page ${clCurrentPage}`;
+    const tbody = document.getElementById('calls-body');
+    if (!calls.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📞</div>No calls yet</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = calls.map(c => `<tr>
+      <td>${c.phone_number}</td>
+      <td>${c.lead_name || '—'}</td>
+      <td>${outcomeBadge(c.outcome)}</td>
+      <td>${fmtDuration(c.duration_seconds)}</td>
+      <td style="font-size:12px;color:var(--muted);">${fmtTime(c.timestamp)}</td>
+      <td><input class="notes-input" value="${(c.notes || '').replace(/"/g, '&quot;')}" placeholder="Add note..." onblur="saveNote('${c.id}',this.value)" /></td>
+    </tr>`).join('');
+  } catch(e) { toast('Failed to load call logs: ' + e.message, 'error'); }
+}
+
+function clPage(delta) {
+  clCurrentPage = Math.max(1, clCurrentPage + delta);
+  loadCallLogs();
+}
+
+async function saveNote(callId, notes) {
+  try {
+    await api(`/api/calls/${callId}/notes`, { method: 'PUT', body: JSON.stringify({ notes }) });
+  } catch(e) { toast('Note save failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// CRM
+// ─────────────────────────────────────────────
+async function loadCRM() {
+  try {
+    const data = await api('/api/contacts');
+    allContacts = data.contacts || [];
+    renderCRM(allContacts);
+  } catch(e) { toast('Failed to load contacts: ' + e.message, 'error'); }
+}
+
+function filterCRM() {
+  const q = document.getElementById('crm-search').value.toLowerCase();
+  renderCRM(allContacts.filter(c => (c.phone_number + (c.lead_name || '')).toLowerCase().includes(q)));
+}
+
+function renderCRM(contacts) {
+  const tbody = document.getElementById('crm-body');
+  if (!contacts.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👥</div>No contacts yet</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = contacts.map(c => `
+    <tr id="crm-row-${c.phone_number.replace(/\+/g,'p')}">
+      <td>${c.phone_number}</td>
+      <td>${c.lead_name || '—'}</td>
+      <td>${c.total_calls}</td>
+      <td>${c.booked}</td>
+      <td>${outcomeBadge(c.last_outcome)}</td>
+      <td style="font-size:12px;color:var(--muted);">${fmtTime(c.last_call)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="expandContact('${c.phone_number}')">Details</button></td>
+    </tr>
+    <tr id="crm-expand-${c.phone_number.replace(/\+/g,'p')}" style="display:none;" class="expand-row">
+      <td colspan="7"><div id="crm-detail-${c.phone_number.replace(/\+/g,'p')}">Loading...</div></td>
+    </tr>`).join('');
+}
+
+async function expandContact(phone) {
+  const key = phone.replace(/\+/g, 'p');
+  const row = document.getElementById(`crm-expand-${key}`);
+  if (row.style.display === 'table-row') { row.style.display = 'none'; return; }
+  row.style.display = 'table-row';
+  const detail = document.getElementById(`crm-detail-${key}`);
+  try {
+    const data = await api(`/api/contacts/${encodeURIComponent(phone)}/memory`);
+    const mems = data.memories || [];
+    const calls = (data.calls || []).slice(0, 5);
+    const appts = (data.appointments || []).slice(0, 3);
+    detail.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-weight:600;margin-bottom:8px;color:var(--accent2);">Memories (${mems.length})</div>
+          ${mems.length ? mems.map(m => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">${m.insight} <span style="color:var(--muted);font-size:10px;">${fmtTime(m.created_at)}</span></div>`).join('') : '<div style="color:var(--muted);font-size:12px;">No memories</div>'}
+        </div>
+        <div>
+          <div style="font-weight:600;margin-bottom:8px;color:var(--accent2);">Recent Calls (${calls.length})</div>
+          ${calls.length ? calls.map(c => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">${outcomeBadge(c.outcome)} ${fmtDuration(c.duration_seconds)} <span style="color:var(--muted);">${fmtTime(c.timestamp)}</span></div>`).join('') : '<div style="color:var(--muted);font-size:12px;">No calls</div>'}
+        </div>
+        <div>
+          <div style="font-weight:600;margin-bottom:8px;color:var(--accent2);">Appointments (${appts.length})</div>
+          ${appts.length ? appts.map(a => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">${a.service} — ${a.date} ${a.time} ${statusBadge(a.status)}</div>`).join('') : '<div style="color:var(--muted);font-size:12px;">No appointments</div>'}
+        </div>
+      </div>`;
+  } catch(e) { detail.innerHTML = `<div style="color:var(--red);">${e.message}</div>`; }
+}
+
+// ─────────────────────────────────────────────
+// Agent Profiles
+// ─────────────────────────────────────────────
+function toggleProfileForm(reset = true) {
+  const f = document.getElementById('profile-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  if (reset && f.style.display === 'block') {
+    document.getElementById('pf-id').value = '';
+    document.getElementById('pf-name').value = '';
+    document.getElementById('pf-voice').value = 'Aoede';
+    document.getElementById('pf-model').value = 'gemini-3.1-flash-live-preview';
+    document.getElementById('pf-prompt').value = '';
+    document.getElementById('pf-default').checked = false;
+    document.getElementById('profile-form-title').textContent = 'New Agent Profile';
+    document.querySelectorAll('#pf-tools input[type=checkbox]').forEach(cb => {
+      cb.checked = ['check_availability','book_appointment','end_call','transfer_to_human','send_sms_confirmation','lookup_contact','remember_details'].includes(cb.value);
+    });
+  }
+}
+
+async function loadProfiles() {
+  try {
+    const data = await api('/api/agent-profiles');
+    const profiles = data.profiles || [];
+    const container = document.getElementById('profiles-list');
+    if (!profiles.length) {
+      container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">🤖</div>No profiles yet</div></div>';
+      return;
+    }
+    container.innerHTML = profiles.map(p => `
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:start;">
+          <div>
+            <div style="font-weight:600;font-size:15px;">${p.name} ${p.is_default ? '<span class="badge badge-green">Default</span>' : ''}</div>
+            <div style="color:var(--muted);font-size:12px;margin-top:4px;">Voice: ${p.voice} | Model: ${p.model}</div>
+            <div style="color:var(--muted);font-size:12px;margin-top:2px;">Created: ${fmtTime(p.created_at)}</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            ${!p.is_default ? `<button class="btn btn-ghost btn-sm" onclick="setDefaultProfile('${p.id}')">Set Default</button>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="editProfile(${JSON.stringify(p).replace(/"/g,'&quot;')})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteProfile('${p.id}')">Delete</button>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch(e) { toast('Failed to load profiles: ' + e.message, 'error'); }
+}
+
+function editProfile(p) {
+  document.getElementById('pf-id').value = p.id;
+  document.getElementById('pf-name').value = p.name;
+  document.getElementById('pf-voice').value = p.voice || 'Aoede';
+  document.getElementById('pf-model').value = p.model;
+  document.getElementById('pf-prompt').value = p.system_prompt || '';
+  document.getElementById('pf-default').checked = !!p.is_default;
+  document.getElementById('profile-form-title').textContent = 'Edit Agent Profile';
+  let enabled = [];
+  try { enabled = JSON.parse(p.enabled_tools || '[]'); } catch {}
+  document.querySelectorAll('#pf-tools input[type=checkbox]').forEach(cb => {
+    cb.checked = enabled.length === 0 || enabled.includes(cb.value);
+  });
+  document.getElementById('profile-form').style.display = 'block';
+  document.getElementById('profile-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function saveProfile() {
+  const id = document.getElementById('pf-id').value;
+  const name = document.getElementById('pf-name').value.trim();
+  if (!name) return toast('Profile name required', 'error');
+  const enabledTools = Array.from(document.querySelectorAll('#pf-tools input[type=checkbox]:checked')).map(cb => cb.value);
+  const body = {
+    name,
+    voice: document.getElementById('pf-voice').value,
+    model: document.getElementById('pf-model').value,
+    system_prompt: document.getElementById('pf-prompt').value.trim() || null,
+    enabled_tools: enabledTools,
+    is_default: document.getElementById('pf-default').checked,
+  };
+  try {
+    if (id) {
+      await api(`/api/agent-profiles/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      toast('Profile updated!', 'success');
+    } else {
+      await api('/api/agent-profiles', { method: 'POST', body: JSON.stringify(body) });
+      toast('Profile created!', 'success');
+    }
+    toggleProfileForm(true);
+    document.getElementById('profile-form').style.display = 'none';
+    loadProfiles();
+  } catch(e) { toast('Save failed: ' + e.message, 'error'); }
+}
+
+async function deleteProfile(id) {
+  if (!confirm('Delete this profile?')) return;
+  try {
+    await api(`/api/agent-profiles/${id}`, { method: 'DELETE' });
+    toast('Profile deleted', 'success');
+    loadProfiles();
+  } catch(e) { toast('Delete failed: ' + e.message, 'error'); }
+}
+
+async function setDefaultProfile(id) {
+  try {
+    await api(`/api/agent-profiles/${id}/set-default`, { method: 'POST' });
+    toast('Default profile updated', 'success');
+    loadProfiles();
+  } catch(e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// AI Prompt
+// ─────────────────────────────────────────────
+async function loadPrompt() {
+  try {
+    const data = await api('/api/prompt');
+    document.getElementById('prompt-editor').value = data.prompt || '';
+    document.getElementById('prompt-custom-badge').style.display = data.is_custom ? 'block' : 'none';
+  } catch(e) { toast('Failed to load prompt: ' + e.message, 'error'); }
+}
+
+async function savePrompt() {
+  const prompt = document.getElementById('prompt-editor').value.trim();
+  if (!prompt) return toast('Prompt cannot be empty', 'error');
+  try {
+    await api('/api/prompt', { method: 'POST', body: JSON.stringify({ prompt }) });
+    toast('Prompt saved!', 'success');
+    loadPrompt();
+  } catch(e) { toast('Save failed: ' + e.message, 'error'); }
+}
+
+async function resetPrompt() {
+  if (!confirm('Reset to default system prompt?')) return;
+  try {
+    await api('/api/settings', { method: 'POST', body: JSON.stringify({ CUSTOM_SYSTEM_PROMPT: '' }) });
+    toast('Prompt reset to default', 'success');
+    loadPrompt();
+  } catch(e) { toast('Reset failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// Settings
+// ─────────────────────────────────────────────
+const SETTINGS_GROUPS = [
+  { title: 'LiveKit', keys: ['LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET'] },
+  { title: 'Google / Gemini', keys: ['GOOGLE_API_KEY', 'GEMINI_MODEL', 'GEMINI_TTS_VOICE', 'USE_GEMINI_REALTIME'] },
+  { title: 'Vobiz SIP', keys: ['VOBIZ_SIP_DOMAIN', 'VOBIZ_USERNAME', 'VOBIZ_PASSWORD', 'VOBIZ_OUTBOUND_NUMBER', 'OUTBOUND_TRUNK_ID', 'DEFAULT_TRANSFER_NUMBER'] },
+  { title: 'Supabase', keys: ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'] },
+  { title: 'Twilio SMS', keys: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_NUMBER'] },
+  { title: 'Cal.com', keys: ['CALCOM_API_KEY', 'CALCOM_EVENT_TYPE_ID', 'CALCOM_TIMEZONE'] },
+  { title: 'S3 / Storage', keys: ['S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_ENDPOINT_URL', 'S3_REGION', 'S3_BUCKET'] },
+  { title: 'Deepgram (fallback)', keys: ['DEEPGRAM_API_KEY'] },
+];
+
+const SENSITIVE = new Set(['LIVEKIT_API_KEY','LIVEKIT_API_SECRET','GOOGLE_API_KEY','VOBIZ_PASSWORD','TWILIO_AUTH_TOKEN','SUPABASE_SERVICE_KEY','S3_SECRET_ACCESS_KEY','CALCOM_API_KEY','DEEPGRAM_API_KEY']);
+
+async function loadSettings() {
+  try {
+    const data = await api('/api/settings');
+    const settings = data.settings || {};
+    const form = document.getElementById('settings-form');
+    form.innerHTML = SETTINGS_GROUPS.map(g => `
+      <div style="margin-bottom:24px;">
+        <div style="font-weight:600;font-size:13px;color:var(--accent2);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">${g.title}</div>
+        <div class="grid-2">
+          ${g.keys.map(k => {
+            const s = settings[k] || {};
+            const isSensitive = SENSITIVE.has(k);
+            const val = s.value || '';
+            const configured = s.configured;
+            const indicator = configured
+              ? '<span class="config-indicator ok">✓ configured</span>'
+              : '<span class="config-indicator missing">✗ not set</span>';
+            if (isSensitive) {
+              return `<div class="form-group">
+                <label>${k} ${indicator}</label>
+                <div class="pw-wrap">
+                  <input type="password" class="form-control" id="s-${k}" placeholder="${configured ? '••••••••• (saved)' : 'Enter value...'}" autocomplete="off" />
+                  <span class="pw-toggle" onclick="togglePw('s-${k}')">👁</span>
+                </div>
+              </div>`;
+            }
+            return `<div class="form-group">
+              <label>${k} ${indicator}</label>
+              <input class="form-control" id="s-${k}" value="${val.replace(/"/g,'&quot;')}" placeholder="Enter value..." />
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`).join('');
+  } catch(e) { toast('Failed to load settings: ' + e.message, 'error'); }
+}
+
+function togglePw(id) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+async function saveSettings() {
+  const body = {};
+  SETTINGS_GROUPS.forEach(g => {
+    g.keys.forEach(k => {
+      const el = document.getElementById(`s-${k}`);
+      if (el && el.value.trim()) body[k] = el.value.trim();
+    });
+  });
+  try {
+    await api('/api/settings', { method: 'POST', body: JSON.stringify(body) });
+    toast('Settings saved!', 'success');
+    checkHealth();
+  } catch(e) { toast('Save failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// Logs
+// ─────────────────────────────────────────────
+async function loadLogs() {
+  try {
+    const level = document.getElementById('log-level-filter').value;
+    const source = document.getElementById('log-source-filter').value;
+    let url = '/api/logs?limit=200';
+    if (level) url += `&level=${level}`;
+    if (source) url += `&source=${source}`;
+    const data = await api(url);
+    const tbody = document.getElementById('logs-body');
+    const logs = data.logs || [];
+    if (!logs.length) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No logs</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = logs.map(l => `<tr>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap;">${fmtTime(l.timestamp)}</td>
+      <td><span class="badge badge-muted">${l.source}</span></td>
+      <td><span class="log-${l.level}">${l.level}</span></td>
+      <td>${l.message}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;">${l.detail || ''}</td>
+    </tr>`).join('');
+  } catch(e) { toast('Failed to load logs: ' + e.message, 'error'); }
+}
+
+async function clearLogs() {
+  if (!confirm('Clear all logs?')) return;
+  try {
+    await api('/api/logs', { method: 'DELETE' });
+    toast('Logs cleared', 'success');
+    loadLogs();
+  } catch(e) { toast('Clear failed: ' + e.message, 'error'); }
+}
+
+// ─────────────────────────────────────────────
+// Auto-refresh
+// ─────────────────────────────────────────────
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    if (currentTab === 'dashboard') loadDashboard();
+    if (currentTab === 'logs') loadLogs();
+    checkHealth();
+  }, 30000);
+}
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  checkHealth();
+  loadDashboard();
+  startAutoRefresh();
+});
+</script>
+</body>
+</html>
