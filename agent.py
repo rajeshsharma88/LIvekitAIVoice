@@ -26,8 +26,8 @@ except ImportError:
 from livekit.plugins import noise_cancellation, silero
 
 from db import init_db, log_error, get_enabled_tools
-from prompts import build_prompt
-from tools import AppointmentTools
+from language import detect_language
+from tools import SalesTools
 
 load_dotenv(".env")
 logging.basicConfig(level=logging.INFO)
@@ -169,6 +169,21 @@ def _extract_metadata(ctx: agents.JobContext) -> dict:
     return {}
 
 
+def _load_language_prompt(language: str, lead_name: str, symptom: str) -> str:
+    """Load the correct language prompt and substitute lead-specific variables."""
+    try:
+        if language == "marathi":
+            from prompts_mr import MARATHI_SYSTEM_PROMPT as raw
+        elif language == "bengali":
+            from prompts_bn import BENGALI_SYSTEM_PROMPT as raw
+        else:
+            from prompts_hi import HINGLISH_SYSTEM_PROMPT as raw
+    except ImportError:
+        from prompts import DEFAULT_SYSTEM_PROMPT as raw
+
+    return raw.replace("{lead_name}", lead_name).replace("{symptom}", symptom or "piles")
+
+
 async def entrypoint(ctx: agents.JobContext) -> None:
     """Main entrypoint for every inbound/outbound call."""
     await ctx.connect()
@@ -177,12 +192,19 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     meta = _extract_metadata(ctx)
     phone = meta.get("phone_number") or _extract_phone(ctx) or "unknown"
     lead_name = meta.get("lead_name", "there")
-    business_name = meta.get("business_name", "our company")
-    service_type = meta.get("service_type", "our service")
-    custom_prompt = meta.get("system_prompt")
-    agent_profile = meta.get("agent_profile")
+    city = meta.get("city", "")
+    symptom = meta.get("symptom", "")
+    sheet_row = meta.get("sheet_row")
+    retry_count = int(meta.get("retry_count", 0))
 
-    # Load agent profile overrides if specified
+    # Language: use pre-detected value from n8n meta, or detect from city
+    language = meta.get("language") or detect_language(city)
+
+    # System prompt: use language-specific prompt (passed via meta or built from language)
+    system_prompt = meta.get("system_prompt") or _load_language_prompt(language, lead_name, symptom)
+
+    # Agent profile overrides (voice/model)
+    agent_profile = meta.get("agent_profile")
     if agent_profile:
         try:
             from db import get_agent_profile
@@ -192,25 +214,24 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                     os.environ["GEMINI_TTS_VOICE"] = profile["voice"]
                 if profile.get("model"):
                     os.environ["GEMINI_MODEL"] = profile["model"]
-                if profile.get("system_prompt") and not custom_prompt:
-                    custom_prompt = profile["system_prompt"]
         except Exception as exc:
             logger.warning("Could not load agent profile: %s", exc)
 
-    system_prompt = build_prompt(
-        lead_name=lead_name,
-        business_name=business_name,
-        service_type=service_type,
-        custom_prompt=custom_prompt,
-    )
-
     enabled_tools = meta.get("enabled_tools") or await get_enabled_tools()
-    tool_ctx = AppointmentTools(ctx, phone_number=phone, lead_name=lead_name)
+    tool_ctx = SalesTools(
+        ctx,
+        phone_number=phone,
+        lead_name=lead_name,
+        sheet_row=sheet_row,
+        city=city,
+        symptom=symptom,
+        language=language,
+    )
     tools = tool_ctx.build_tool_list(enabled_tools)
 
-    session = _build_session(tools=tools, system_prompt=system_prompt)
+    await _log("info", f"Call: {lead_name} ({phone}) lang={language} city={city} retry={retry_count}")
 
-    await _log("info", f"Starting session for {lead_name} ({phone})")
+    session = _build_session(tools=tools, system_prompt=system_prompt)
 
     input_opts = RoomInputOptions(
         noise_cancellation=noise_cancellation.BVC(),

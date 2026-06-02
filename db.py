@@ -445,3 +445,100 @@ async def set_default_agent_profile(profile_id: str) -> None:
     db = await _adb()
     await db.table("agent_profiles").update({"is_default": 0}).neq("id", "placeholder").execute()
     await db.table("agent_profiles").update({"is_default": 1}).eq("id", profile_id).execute()
+
+
+# ── Orders ────────────────────────────────────────────────────────────────────
+
+async def log_order(
+    phone_number: str,
+    lead_name: Optional[str],
+    city: Optional[str],
+    variant: str,
+    amount: str,
+    full_address: str,
+    pincode: str,
+    landmark: str = "",
+    alt_phone: str = "",
+    language: str = "hinglish",
+    notes: str = "",
+    order_id: Optional[str] = None,
+) -> str:
+    if not order_id:
+        order_id = f"AI{uuid.uuid4().hex[:8].upper()}"
+    db = await _adb()
+    await db.table("orders").insert({
+        "id": str(uuid.uuid4()),
+        "order_id": order_id,
+        "phone_number": phone_number,
+        "lead_name": lead_name,
+        "city": city,
+        "variant": variant,
+        "amount": amount,
+        "full_address": full_address,
+        "pincode": pincode,
+        "landmark": landmark,
+        "alt_phone": alt_phone,
+        "language": language,
+        "notes": notes,
+        "status": "pending",
+        "created_at": datetime.now().isoformat(),
+    }).execute()
+    return order_id
+
+
+async def get_all_orders(page: int = 1, limit: int = 20) -> list:
+    db = await _adb()
+    offset = (page - 1) * limit
+    result = await (
+        db.table("orders").select("*")
+        .order("created_at", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
+    return result.data or []
+
+
+async def get_order(order_id: str) -> Optional[dict]:
+    db = await _adb()
+    result = await db.table("orders").select("*").eq("order_id", order_id).maybe_single().execute()
+    return result.data if result else None
+
+
+async def get_orders_by_phone(phone: str) -> list:
+    db = await _adb()
+    result = await (
+        db.table("orders").select("*")
+        .eq("phone_number", phone)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return result.data or []
+
+
+async def update_order_status(order_id: str, status: str) -> bool:
+    db = await _adb()
+    result = await db.table("orders").update({"status": status}).eq("order_id", order_id).execute()
+    return len(result.data or []) > 0
+
+
+async def get_order_stats() -> dict:
+    db = await _adb()
+    rows = (await db.table("orders").select("variant, amount, status, created_at").execute()).data or []
+    total = len(rows)
+    pending = sum(1 for r in rows if r.get("status") == "pending")
+    confirmed = sum(1 for r in rows if r.get("status") == "confirmed")
+    delivered = sum(1 for r in rows if r.get("status") == "delivered")
+    cancelled = sum(1 for r in rows if r.get("status") == "cancelled")
+    revenue = sum(int(r.get("amount", 0) or 0) for r in rows if r.get("status") not in ("cancelled",))
+    kit_15 = sum(1 for r in rows if "15" in str(r.get("variant", "")))
+    kit_30 = sum(1 for r in rows if "30" in str(r.get("variant", "")))
+    return {
+        "total_orders": total,
+        "pending": pending,
+        "confirmed": confirmed,
+        "delivered": delivered,
+        "cancelled": cancelled,
+        "total_revenue": revenue,
+        "kit_15day": kit_15,
+        "kit_30day": kit_30,
+    }

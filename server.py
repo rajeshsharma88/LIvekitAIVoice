@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import db
+from language import detect_language
 from prompts import DEFAULT_SYSTEM_PROMPT, build_prompt
 
 load_dotenv(".env")
@@ -79,6 +80,15 @@ class AgentProfileCreate(BaseModel):
     enabled_tools: list = []
     is_default: bool = False
 
+class N8nWebhookRequest(BaseModel):
+    name: str = "there"
+    phone: str
+    city: str = ""
+    symptom: str = ""
+    sheet_row: Optional[int] = None
+    retry_count: int = 0
+    agent_profile_id: Optional[str] = None
+
 class NotesUpdate(BaseModel):
     notes: str
 
@@ -96,6 +106,7 @@ async def dispatch_call(
     system_prompt: Optional[str] = None,
     agent_profile_id: Optional[str] = None,
     enabled_tools: Optional[list] = None,
+    extra_meta: Optional[dict] = None,
 ) -> dict:
     lk_url = os.getenv("LIVEKIT_URL", "")
     lk_key = os.getenv("LIVEKIT_API_KEY", "")
@@ -122,6 +133,8 @@ async def dispatch_call(
         meta["agent_profile"] = agent_profile_id
     if enabled_tools:
         meta["enabled_tools"] = enabled_tools
+    if extra_meta:
+        meta.update(extra_meta)
 
     # Generate LiveKit access token for API calls
     try:
@@ -592,4 +605,90 @@ async def get_prompt():
 @app.post("/api/prompt")
 async def save_prompt(body: PromptSave):
     await db.set_setting("CUSTOM_SYSTEM_PROMPT", body.prompt)
+    return {"success": True}
+
+
+# ── n8n Webhook — triggered by n8n when a new lead arrives ───────────────────
+
+@app.post("/api/call/webhook")
+async def call_webhook(req: N8nWebhookRequest):
+    """
+    Called by n8n when a new lead row appears in Google Sheet (Status=new)
+    or when retrying a no_answer lead. Detects language from city, builds
+    language-specific metadata, and dispatches the outbound call.
+    """
+    language = detect_language(req.city)
+
+    # Load language-specific system prompt
+    try:
+        if language == "marathi":
+            from prompts_mr import MARATHI_SYSTEM_PROMPT as lang_prompt
+        elif language == "bengali":
+            from prompts_bn import BENGALI_SYSTEM_PROMPT as lang_prompt
+        else:
+            from prompts_hi import HINGLISH_SYSTEM_PROMPT as lang_prompt
+    except ImportError:
+        lang_prompt = None
+
+    meta_extra = {
+        "language": language,
+        "city": req.city,
+        "symptom": req.symptom,
+        "sheet_row": req.sheet_row,
+        "retry_count": req.retry_count,
+        "business_name": "Aarogya India",
+        "service_type": "3A Piles Kit",
+    }
+
+    try:
+        result = await dispatch_call(
+            phone_number=req.phone,
+            lead_name=req.name,
+            business_name="Aarogya India",
+            service_type="3A Piles Kit",
+            system_prompt=lang_prompt,
+            agent_profile_id=req.agent_profile_id,
+            extra_meta=meta_extra,
+        )
+        await db.log_error(
+            "webhook",
+            f"n8n call dispatched: {req.phone} ({language}) row={req.sheet_row}",
+            "",
+            "info",
+        )
+        return {"success": True, "language": language, **result}
+    except Exception as exc:
+        await db.log_error("webhook", f"n8n call failed for {req.phone}: {exc}", str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Orders endpoints ──────────────────────────────────────────────────────────
+
+@app.get("/api/orders")
+async def get_orders(page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100)):
+    orders = await db.get_all_orders(page=page, limit=limit)
+    return {"orders": orders, "page": page, "limit": limit}
+
+
+@app.get("/api/orders/stats")
+async def get_order_stats():
+    return await db.get_order_stats()
+
+
+@app.get("/api/orders/{order_id}")
+async def get_order(order_id: str):
+    order = await db.get_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+
+@app.put("/api/orders/{order_id}/status")
+async def update_order_status(order_id: str, body: dict):
+    status = body.get("status", "")
+    if status not in ("pending", "confirmed", "dispatched", "delivered", "cancelled"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    ok = await db.update_order_status(order_id, status)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Order not found")
     return {"success": True}

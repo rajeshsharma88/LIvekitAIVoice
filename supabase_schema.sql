@@ -84,3 +84,26 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     created_at TEXT NOT NULL
 );
 ALTER TABLE agent_profiles DISABLE ROW LEVEL SECURITY;
+
+-- Aarogya India: COD Orders table
+CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL UNIQUE,
+    phone_number TEXT NOT NULL,
+    lead_name TEXT,
+    city TEXT,
+    variant TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    full_address TEXT NOT NULL,
+    pincode TEXT NOT NULL,
+    landmark TEXT,
+    alt_phone TEXT,
+    language TEXT DEFAULT 'hinglish',
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL
+);
+ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_orders_phone   ON orders (phone_number);
+CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders (status);
+CREATE INDEX IF NOT EXISTS idx_orders_created ON orders (created_at);
