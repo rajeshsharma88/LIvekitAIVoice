@@ -156,6 +156,9 @@ async def dispatch_call(
                 )
             )
 
+            # Give LiveKit a moment to register the room before dispatching the agent
+            await asyncio.sleep(1)
+
             # Dispatch Priya agent to the room
             try:
                 await lk.agent_dispatch.create_dispatch(
