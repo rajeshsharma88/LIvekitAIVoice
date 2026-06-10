@@ -118,9 +118,6 @@ async def dispatch_call(
     if not all([lk_url, lk_key, lk_secret, trunk_id]):
         raise ValueError("LiveKit credentials or OUTBOUND_TRUNK_ID not configured")
 
-    # Build HTTP URL from WSS URL
-    http_url = lk_url.replace("wss://", "https://").replace("ws://", "http://").rstrip("/")
-
     room_name = f"outbound-{uuid.uuid4().hex[:12]}"
 
     meta = {
@@ -138,54 +135,42 @@ async def dispatch_call(
     if extra_meta:
         meta.update(extra_meta)
 
-    # Generate LiveKit access token for API calls
+    meta_str = json.dumps(meta)
+
     try:
-        from livekit.api import AccessToken, VideoGrants
-        token = (
-            AccessToken(lk_key, lk_secret)
-            .with_grants(VideoGrants(room_create=True, room_join=True, room=room_name))
-            .with_identity("outbound-server")
-            .to_jwt()
-        )
-    except Exception as exc:
-        raise ValueError(f"Could not generate LiveKit token: {exc}")
+        from livekit import api as lkapi
+        from livekit.protocol.sip import CreateSIPParticipantRequest
+        from livekit.protocol.agent_dispatch import CreateAgentDispatchRequest
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+        async with lkapi.LiveKitAPI(url=lk_url, api_key=lk_key, api_secret=lk_secret) as lk:
+            # Dial the phone number via SIP trunk
+            await lk.sip.create_sip_participant(
+                CreateSIPParticipantRequest(
+                    sip_trunk_id=trunk_id,
+                    sip_call_to=phone_number,
+                    room_name=room_name,
+                    participant_identity=f"sip_{phone_number.replace('+', '')}",
+                    participant_name=lead_name,
+                    participant_metadata=meta_str,
+                    play_ringtone=False,
+                )
+            )
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        # Create SIP outbound call -- this dials the phone via Vobiz trunk
-        sip_resp = await client.post(
-            f"{http_url}/twirp/livekit.SIP/CreateSIPParticipant",
-            headers=headers,
-            json={
-                "sip_trunk_id": trunk_id,
-                "sip_call_to": phone_number,
-                "room_name": room_name,
-                "participant_identity": f"sip_{phone_number.replace('+', '')}",
-                "participant_name": lead_name,
-                "participant_metadata": json.dumps(meta),
-                "play_ringtone": False,
-            },
-        )
-        if sip_resp.status_code not in (200, 201):
-            raise ValueError(f"SIP dispatch failed [{sip_resp.status_code}]: {sip_resp.text}")
+            # Dispatch Priya agent to the room
+            try:
+                await lk.agent_dispatch.create_dispatch(
+                    CreateAgentDispatchRequest(
+                        room=room_name,
+                        agent_name="outbound-agent",
+                        metadata=meta_str,
+                    )
+                )
+            except Exception as dispatch_exc:
+                # Worker-mode agents pick up the room automatically — dispatch failure is non-fatal
+                logger.warning("Agent dispatch skipped (worker mode likely active): %s", dispatch_exc)
 
-        # Dispatch agent to the room
-        dispatch_resp = await client.post(
-            f"{http_url}/twirp/livekit.AgentDispatch/CreateDispatch",
-            headers=headers,
-            json={
-                "room": room_name,
-                "agent_name": "outbound-agent",
-                "metadata": json.dumps(meta),
-            },
-        )
-        # Agent dispatch may 404 if using worker dispatch mode -- that's OK
-        if dispatch_resp.status_code not in (200, 201, 404):
-            logger.warning("Agent dispatch returned %d: %s", dispatch_resp.status_code, dispatch_resp.text)
+    except ImportError as exc:
+        raise ValueError(f"livekit-api package missing or outdated: {exc}")
 
     await db.log_error("server", f"Call dispatched to {phone_number} in room {room_name}", "", "info")
     return {"room": room_name, "phone": phone_number, "status": "dispatched"}
