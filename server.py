@@ -307,6 +307,29 @@ async def health():
     return {"status": "ok", "config": config, "timestamp": datetime.now().isoformat()}
 
 
+@app.get("/api/sip/trunks")
+async def list_sip_trunks():
+    """Debug endpoint — lists all SIP trunks in your LiveKit project so you can find the correct OUTBOUND_TRUNK_ID."""
+    lk_url = os.getenv("LIVEKIT_URL", "")
+    lk_key = os.getenv("LIVEKIT_API_KEY", "")
+    lk_secret = os.getenv("LIVEKIT_API_SECRET", "")
+    if not all([lk_url, lk_key, lk_secret]):
+        raise HTTPException(status_code=500, detail="LiveKit credentials not configured")
+    try:
+        from livekit import api as lkapi
+        from livekit.protocol.sip import ListSIPOutboundTrunkRequest
+        async with lkapi.LiveKitAPI(url=lk_url, api_key=lk_key, api_secret=lk_secret) as lk:
+            resp = await lk.sip.list_sip_outbound_trunk(ListSIPOutboundTrunkRequest())
+            trunks = [
+                {"id": t.sid, "name": t.name, "address": t.address, "numbers": list(t.numbers)}
+                for t in (resp.items or [])
+            ]
+        current = os.getenv("OUTBOUND_TRUNK_ID", "")
+        return {"trunks": trunks, "current_env": current, "match": any(t["id"] == current for t in trunks)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/api/call/single")
 async def call_single(req: SingleCallRequest):
     try:
