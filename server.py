@@ -140,27 +140,29 @@ async def dispatch_call(
     try:
         from livekit import api as lkapi
         from livekit.protocol.sip import CreateSIPParticipantRequest
-        from livekit.protocol.agent_dispatch import CreateAgentDispatchRequest
+    except ImportError as exc:
+        raise ValueError(f"livekit-api package missing or outdated: {exc}")
 
+    try:
         async with lkapi.LiveKitAPI(url=lk_url, api_key=lk_key, api_secret=lk_secret) as lk:
             # Dial the phone number via SIP trunk
-            await lk.sip.create_sip_participant(
-                CreateSIPParticipantRequest(
-                    sip_trunk_id=trunk_id,
-                    sip_call_to=phone_number,
-                    room_name=room_name,
-                    participant_identity=f"sip_{phone_number.replace('+', '')}",
-                    participant_name=lead_name,
-                    participant_metadata=meta_str,
-                    play_ringtone=False,
-                )
+            sip_req = CreateSIPParticipantRequest(
+                sip_trunk_id=trunk_id,
+                sip_call_to=phone_number,
+                room_name=room_name,
+                participant_identity=f"sip_{phone_number.replace('+', '')}",
+                participant_name=lead_name,
+                participant_metadata=meta_str,
             )
+            await lk.sip.create_sip_participant(sip_req)
+            logger.info("SIP call dispatched to %s in room %s", phone_number, room_name)
 
             # Give LiveKit a moment to register the room before dispatching the agent
             await asyncio.sleep(1)
 
             # Dispatch Priya agent to the room
             try:
+                from livekit.protocol.agent_dispatch import CreateAgentDispatchRequest
                 await lk.agent_dispatch.create_dispatch(
                     CreateAgentDispatchRequest(
                         room=room_name,
@@ -168,12 +170,14 @@ async def dispatch_call(
                         metadata=meta_str,
                     )
                 )
+                logger.info("Agent dispatched to room %s", room_name)
             except Exception as dispatch_exc:
-                # Worker-mode agents pick up the room automatically — dispatch failure is non-fatal
-                logger.warning("Agent dispatch skipped (worker mode likely active): %s", dispatch_exc)
+                # Worker-mode agents pick up the room automatically — non-fatal
+                logger.warning("Agent dispatch skipped: %s", dispatch_exc)
 
-    except ImportError as exc:
-        raise ValueError(f"livekit-api package missing or outdated: {exc}")
+    except Exception as exc:
+        logger.error("dispatch_call failed for %s: %s", phone_number, exc)
+        raise ValueError(str(exc))
 
     await db.log_error("server", f"Call dispatched to {phone_number} in room {room_name}", "", "info")
     return {"room": room_name, "phone": phone_number, "status": "dispatched"}
