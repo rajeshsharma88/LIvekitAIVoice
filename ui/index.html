@@ -197,7 +197,7 @@
       <div class="nav-item" onclick="showTab('single')"><span class="icon">📱</span> Single Call</div>
       <div class="nav-item" onclick="showTab('batch')"><span class="icon">📋</span> Batch Upload</div>
       <div class="nav-item" onclick="showTab('campaigns')"><span class="icon">🚀</span> Campaigns</div>
-      <div class="nav-item" onclick="showTab('appointments')"><span class="icon">📅</span> Appointments</div>
+      <div class="nav-item" onclick="showTab('orders')"><span class="icon">📦</span> Orders</div>
       <div class="nav-item" onclick="showTab('calllogs')"><span class="icon">📞</span> Call Logs</div>
       <div class="nav-item" onclick="showTab('crm')"><span class="icon">👥</span> CRM</div>
       <div class="nav-item" onclick="showTab('profiles')"><span class="icon">🤖</span> Agent Profiles</div>
@@ -228,8 +228,8 @@
         <div class="section">
           <div class="grid-4" id="stats-cards">
             <div class="card"><div class="card-title">Total Calls</div><div class="card-value" id="s-total">—</div><div class="card-sub">All time</div></div>
-            <div class="card"><div class="card-title">Booked</div><div class="card-value" id="s-booked" style="color:var(--green)">—</div><div class="card-sub">Appointments confirmed</div></div>
-            <div class="card"><div class="card-title">Booking Rate</div><div class="card-value" id="s-rate">—</div><div class="card-sub">% calls converted</div></div>
+            <div class="card"><div class="card-title">Total Orders</div><div class="card-value" id="s-orders" style="color:var(--green)">—</div><div class="card-sub">COD orders booked</div></div>
+            <div class="card"><div class="card-title">Revenue</div><div class="card-value" id="s-revenue" style="color:var(--accent2)">—</div><div class="card-sub">Total order value ₹</div></div>
             <div class="card"><div class="card-title">Avg Duration</div><div class="card-value" id="s-dur">—</div><div class="card-sub">seconds per call</div></div>
           </div>
         </div>
@@ -349,35 +349,40 @@
         </div>
       </div>
 
-      <!-- APPOINTMENTS -->
-      <div id="tab-appointments" class="tab-content">
+      <!-- ORDERS -->
+      <div id="tab-orders" class="tab-content">
         <div class="section">
           <div class="section-header">
-            <span class="section-title">Appointments</span>
+            <span class="section-title">COD Orders</span>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input type="date" class="form-control" id="appt-date-filter" style="width:auto;" onchange="loadAppointments()" />
-              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('appt-date-filter').value='';loadAppointments()">Clear</button>
+              <select class="form-control" id="orders-status-filter" style="width:auto;" onchange="loadOrders()">
+                <option value="">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="loadOrders()">↻ Refresh</button>
             </div>
           </div>
-          <div class="card" style="margin-bottom:16px;">
-            <div class="section-title" style="margin-bottom:16px;">Book Appointment Manually</div>
-            <div class="form-row-3">
-              <div class="form-group"><label>Name *</label><input class="form-control" id="na-name" placeholder="Rahul Sharma" /></div>
-              <div class="form-group"><label>Phone *</label><input class="form-control" id="na-phone" placeholder="+919876543210" /></div>
-              <div class="form-group"><label>Service *</label><input class="form-control" id="na-svc" placeholder="Dental checkup" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label>Date *</label><input class="form-control" type="date" id="na-date" /></div>
-              <div class="form-group"><label>Time *</label><input class="form-control" type="time" id="na-time" /></div>
-            </div>
-            <button class="btn btn-primary" onclick="createAppointment()">+ Add Appointment</button>
+          <div class="grid-4" style="margin-bottom:16px;" id="orders-stat-cards">
+            <div class="card"><div class="card-title">Total Orders</div><div class="card-value" id="os-total">—</div></div>
+            <div class="card"><div class="card-title">Pending</div><div class="card-value" id="os-pending" style="color:var(--yellow)">—</div></div>
+            <div class="card"><div class="card-title">Delivered</div><div class="card-value" id="os-delivered" style="color:var(--green)">—</div></div>
+            <div class="card"><div class="card-title">Revenue ₹</div><div class="card-value" id="os-revenue" style="color:var(--accent2)">—</div></div>
           </div>
           <div class="card">
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Name</th><th>Phone</th><th>Service</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
-                <tbody id="appointments-body"></tbody>
+                <thead><tr><th>Order ID</th><th>Name</th><th>Phone</th><th>City</th><th>Kit</th><th>Amount</th><th>Language</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+                <tbody id="orders-body"></tbody>
               </table>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:12px 0 0;">
+              <span id="orders-page-info" style="color:var(--muted);font-size:12px;"></span>
+              <button class="btn btn-ghost btn-sm" onclick="ordersPage(-1)">&#8249; Prev</button>
+              <button class="btn btn-ghost btn-sm" onclick="ordersPage(1)">Next &#8250;</button>
             </div>
           </div>
         </div>
@@ -457,15 +462,12 @@
             <div class="form-group"><label>System Prompt (optional)</label><textarea class="form-control" id="pf-prompt" style="min-height:120px;" placeholder="Leave blank to use global default prompt..."></textarea></div>
             <div class="form-group"><label>Enabled Tools</label>
               <div id="pf-tools" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
-                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="check_availability" checked /> check_availability</label>
-                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="book_appointment" checked /> book_appointment</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="book_order" checked /> book_order</label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="request_callback" checked /> request_callback</label>
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="end_call" checked /> end_call</label>
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="transfer_to_human" checked /> transfer_to_human</label>
-                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="send_sms_confirmation" checked /> send_sms_confirmation</label>
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="lookup_contact" checked /> lookup_contact</label>
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="remember_details" checked /> remember_details</label>
-                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="book_calcom" /> book_calcom</label>
-                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" value="cancel_calcom" /> cancel_calcom</label>
               </div>
             </div>
             <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="pf-default" /> Set as Default Profile</label></div>
@@ -621,7 +623,7 @@ function fmtTime(ts) {
 // ─────────────────────────────────────────────
 const TAB_TITLES = {
   dashboard: 'Dashboard', single: 'Single Call', batch: 'Batch Upload',
-  campaigns: 'Campaigns', appointments: 'Appointments', calllogs: 'Call Logs',
+  campaigns: 'Campaigns', orders: 'Orders', calllogs: 'Call Logs',
   crm: 'CRM', profiles: 'Agent Profiles', prompt: 'AI Prompt',
   settings: 'Settings', logs: 'Live Logs',
 };
@@ -642,7 +644,7 @@ function loadTab(tab) {
   switch(tab) {
     case 'dashboard': loadDashboard(); break;
     case 'campaigns': loadCampaigns(); break;
-    case 'appointments': loadAppointments(); break;
+    case 'orders': loadOrders(); break;
     case 'calllogs': loadCallLogs(); break;
     case 'crm': loadCRM(); break;
     case 'profiles': loadProfiles(); break;
@@ -679,12 +681,16 @@ async function loadDashboard() {
   try {
     const stats = await api('/api/stats');
     document.getElementById('s-total').textContent = stats.total_calls;
-    document.getElementById('s-booked').textContent = stats.booked;
-    document.getElementById('s-rate').textContent = stats.booking_rate_percent + '%';
     document.getElementById('s-dur').textContent = fmtDuration(Math.round(stats.avg_duration_seconds));
     renderTimelineChart(stats.timeline || []);
     renderOutcomesChart(stats.outcomes || {});
   } catch(e) { toast('Failed to load stats: ' + e.message, 'error'); }
+
+  try {
+    const os = await api('/api/orders/stats');
+    document.getElementById('s-orders').textContent = os.total_orders || 0;
+    document.getElementById('s-revenue').textContent = '₹' + (os.total_revenue || 0).toLocaleString('en-IN');
+  } catch { document.getElementById('s-orders').textContent = '—'; document.getElementById('s-revenue').textContent = '—'; }
 
   try {
     const calls = await api('/api/calls?limit=10');
@@ -903,52 +909,77 @@ async function deleteCampaign(id) {
 }
 
 // ─────────────────────────────────────────────
-// Appointments
+// Orders
 // ─────────────────────────────────────────────
-async function loadAppointments() {
+let ordersCurrentPage = 1;
+
+function orderStatusBadge(status) {
+  const map = { pending: 'badge-yellow', confirmed: 'badge-blue', shipped: 'badge-orange', delivered: 'badge-green', cancelled: 'badge-red', returned: 'badge-red' };
+  return `<span class="badge ${map[status] || 'badge-muted'}">${status || '—'}</span>`;
+}
+
+function langBadge(lang) {
+  const map = { hinglish: 'badge-blue', marathi: 'badge-orange', bengali: 'badge-green' };
+  return `<span class="badge ${map[lang] || 'badge-muted'}">${lang || 'hinglish'}</span>`;
+}
+
+async function loadOrders() {
   try {
-    const dateFilter = document.getElementById('appt-date-filter').value;
-    const url = dateFilter ? `/api/appointments?date=${dateFilter}` : '/api/appointments';
+    const statusFilter = document.getElementById('orders-status-filter').value;
+    let url = `/api/orders?page=${ordersCurrentPage}&limit=20`;
+    if (statusFilter) url += `&status=${statusFilter}`;
     const data = await api(url);
-    const tbody = document.getElementById('appointments-body');
-    const appts = data.appointments || [];
-    if (!appts.length) {
-      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📅</div>No appointments</div></td></tr>';
-      return;
+    const orders = data.orders || [];
+    document.getElementById('orders-page-info').textContent = `Page ${ordersCurrentPage} — ${orders.length} records`;
+    const tbody = document.getElementById('orders-body');
+    if (!orders.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📦</div>No orders yet</div></td></tr>';
+    } else {
+      tbody.innerHTML = orders.map(o => `<tr>
+        <td style="font-family:monospace;font-size:12px;">${o.order_id}</td>
+        <td>${o.lead_name || '—'}</td>
+        <td>${o.phone_number}</td>
+        <td>${o.city || '—'}</td>
+        <td><span class="badge badge-purple">${o.variant || '—'}</span></td>
+        <td style="font-weight:600;color:var(--green);">₹${o.amount}</td>
+        <td>${langBadge(o.language)}</td>
+        <td>${orderStatusBadge(o.status)}</td>
+        <td style="font-size:12px;color:var(--muted);">${fmtTime(o.created_at)}</td>
+        <td>
+          <select class="form-control" style="padding:3px 6px;font-size:11px;width:auto;" onchange="updateOrderStatus('${o.order_id}', this.value)">
+            <option value="">Update...</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="shipped">Shipped</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="returned">Returned</option>
+          </select>
+        </td>
+      </tr>`).join('');
     }
-    tbody.innerHTML = appts.map(a => `<tr>
-      <td>${a.name}</td>
-      <td>${a.phone}</td>
-      <td>${a.service}</td>
-      <td>${a.date}</td>
-      <td>${a.time}</td>
-      <td>${statusBadge(a.status)}</td>
-      <td>${a.status === 'booked' ? `<button class="btn btn-sm btn-danger" onclick="cancelAppointment('${a.id}')">Cancel</button>` : ''}</td>
-    </tr>`).join('');
-  } catch(e) { toast('Failed to load appointments: ' + e.message, 'error'); }
+  } catch(e) { toast('Failed to load orders: ' + e.message, 'error'); }
+
+  try {
+    const os = await api('/api/orders/stats');
+    document.getElementById('os-total').textContent = os.total_orders || 0;
+    document.getElementById('os-pending').textContent = os.pending || 0;
+    document.getElementById('os-delivered').textContent = os.delivered || 0;
+    document.getElementById('os-revenue').textContent = '₹' + (os.total_revenue || 0).toLocaleString('en-IN');
+  } catch {}
 }
 
-async function createAppointment() {
-  const name = document.getElementById('na-name').value.trim();
-  const phone = document.getElementById('na-phone').value.trim();
-  const service = document.getElementById('na-svc').value.trim();
-  const date = document.getElementById('na-date').value;
-  const time = document.getElementById('na-time').value;
-  if (!name || !phone || !service || !date || !time) return toast('All fields required', 'error');
-  try {
-    const data = await api('/api/appointments', { method: 'POST', body: JSON.stringify({ name, phone, date, time, service }) });
-    toast(`Appointment booked! ID: ${data.booking_id}`, 'success');
-    loadAppointments();
-  } catch(e) { toast('Create failed: ' + e.message, 'error'); }
+function ordersPage(delta) {
+  ordersCurrentPage = Math.max(1, ordersCurrentPage + delta);
+  loadOrders();
 }
 
-async function cancelAppointment(id) {
-  if (!confirm('Cancel this appointment?')) return;
+async function updateOrderStatus(orderId, status) {
+  if (!status) return;
   try {
-    await api(`/api/appointments/${id}`, { method: 'DELETE' });
-    toast('Appointment cancelled', 'success');
-    loadAppointments();
-  } catch(e) { toast('Cancel failed: ' + e.message, 'error'); }
+    await api(`/api/orders/${orderId}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+    toast(`Order ${orderId} → ${status}`, 'success');
+    loadOrders();
+  } catch(e) { toast('Update failed: ' + e.message, 'error'); }
 }
 
 // ─────────────────────────────────────────────
@@ -1034,6 +1065,8 @@ async function expandContact(phone) {
     const mems = data.memories || [];
     const calls = (data.calls || []).slice(0, 5);
     const appts = (data.appointments || []).slice(0, 3);
+    let contactOrders = [];
+    try { const od = await api(`/api/orders?phone=${encodeURIComponent(phone)}&limit=5`); contactOrders = od.orders || []; } catch {}
     detail.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div>
@@ -1045,8 +1078,8 @@ async function expandContact(phone) {
           ${calls.length ? calls.map(c => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">${outcomeBadge(c.outcome)} ${fmtDuration(c.duration_seconds)} <span style="color:var(--muted);">${fmtTime(c.timestamp)}</span></div>`).join('') : '<div style="color:var(--muted);font-size:12px;">No calls</div>'}
         </div>
         <div>
-          <div style="font-weight:600;margin-bottom:8px;color:var(--accent2);">Appointments (${appts.length})</div>
-          ${appts.length ? appts.map(a => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">${a.service} — ${a.date} ${a.time} ${statusBadge(a.status)}</div>`).join('') : '<div style="color:var(--muted);font-size:12px;">No appointments</div>'}
+          <div style="font-weight:600;margin-bottom:8px;color:var(--accent2);">Orders (${contactOrders.length})</div>
+          ${contactOrders.length ? contactOrders.map(o => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);"><span class="badge badge-purple" style="font-size:10px;">${o.variant}</span> ₹${o.amount} ${orderStatusBadge(o.status)}</div>`).join('') : '<div style="color:var(--muted);font-size:12px;">No orders</div>'}
         </div>
       </div>`;
   } catch(e) { detail.innerHTML = `<div style="color:var(--red);">${e.message}</div>`; }
@@ -1067,7 +1100,7 @@ function toggleProfileForm(reset = true) {
     document.getElementById('pf-default').checked = false;
     document.getElementById('profile-form-title').textContent = 'New Agent Profile';
     document.querySelectorAll('#pf-tools input[type=checkbox]').forEach(cb => {
-      cb.checked = ['check_availability','book_appointment','end_call','transfer_to_human','send_sms_confirmation','lookup_contact','remember_details'].includes(cb.value);
+      cb.checked = ['book_order','request_callback','end_call','transfer_to_human','lookup_contact','remember_details'].includes(cb.value);
     });
   }
 }

@@ -542,3 +542,37 @@ async def get_order_stats() -> dict:
         "kit_15day": kit_15,
         "kit_30day": kit_30,
     }
+
+
+# ── CRM leads table integration ───────────────────────────────────────────────
+
+async def update_crm_lead_ai_status(lead_id: str, ai_status: str) -> bool:
+    """Write AI call status back to the CRM leads table (same Supabase project)."""
+    try:
+        db = await _adb()
+        result = await (
+            db.table("leads")
+            .update({"ai_call_status": ai_status, "ai_called_at": datetime.utcnow().isoformat()})
+            .eq("id", lead_id)
+            .execute()
+        )
+        return len(result.data or []) > 0
+    except Exception:
+        return False
+
+
+async def get_crm_lead_by_phone(phone: str) -> Optional[dict]:
+    """Look up a lead in the CRM leads table by phone number."""
+    try:
+        db = await _adb()
+        result = await (
+            db.table("leads")
+            .select("id, name, phone, city, source, notes, ai_call_status")
+            .eq("phone", phone)
+            .maybe_single()
+            .execute()
+        )
+        return result.data if result else None
+    except Exception:
+        return None
+

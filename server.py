@@ -86,6 +86,8 @@ class N8nWebhookRequest(BaseModel):
     city: str = ""
     symptom: str = ""
     sheet_row: Optional[int] = None
+    lead_id: Optional[str] = None       # Supabase leads.id when triggered from CRM
+    source: Optional[str] = None
     retry_count: int = 0
     agent_profile_id: Optional[str] = None
 
@@ -635,6 +637,7 @@ async def call_webhook(req: N8nWebhookRequest):
         "city": req.city,
         "symptom": req.symptom,
         "sheet_row": req.sheet_row,
+        "lead_id": req.lead_id,
         "retry_count": req.retry_count,
         "business_name": "Aarogya India",
         "service_type": "3A Piles Kit",
@@ -650,15 +653,19 @@ async def call_webhook(req: N8nWebhookRequest):
             agent_profile_id=req.agent_profile_id,
             extra_meta=meta_extra,
         )
+        # Mark CRM lead as "ai_calling" so the dashboard shows live status
+        if req.lead_id:
+            await db.update_crm_lead_ai_status(req.lead_id, "ai_calling")
+
         await db.log_error(
             "webhook",
-            f"n8n call dispatched: {req.phone} ({language}) row={req.sheet_row}",
+            f"Call dispatched: {req.phone} ({language}) lead_id={req.lead_id} row={req.sheet_row}",
             "",
             "info",
         )
         return {"success": True, "language": language, **result}
     except Exception as exc:
-        await db.log_error("webhook", f"n8n call failed for {req.phone}: {exc}", str(exc))
+        await db.log_error("webhook", f"Call failed for {req.phone}: {exc}", str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
 
 
