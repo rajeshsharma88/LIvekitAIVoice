@@ -330,6 +330,59 @@ async def list_sip_trunks():
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.post("/api/sip/create-trunk")
+async def create_sip_trunk():
+    """Create a new SIP outbound trunk using Vobiz credentials and auto-update OUTBOUND_TRUNK_ID."""
+    lk_url = os.getenv("LIVEKIT_URL", "")
+    lk_key = os.getenv("LIVEKIT_API_KEY", "")
+    lk_secret = os.getenv("LIVEKIT_API_SECRET", "")
+    sip_domain = os.getenv("VOBIZ_SIP_DOMAIN", "")
+    sip_user = os.getenv("VOBIZ_USERNAME", "")
+    sip_password = os.getenv("VOBIZ_PASSWORD", "")
+    outbound_num = os.getenv("VOBIZ_OUTBOUND_NUMBER", "")
+
+    if not all([lk_url, lk_key, lk_secret, sip_domain]):
+        raise HTTPException(status_code=500, detail="LiveKit or Vobiz credentials not configured")
+
+    try:
+        from livekit import api as lkapi
+        from livekit.protocol.sip import (
+            CreateSIPOutboundTrunkRequest,
+            SIPOutboundTrunkInfo,
+        )
+
+        trunk_info = SIPOutboundTrunkInfo(
+            name="Vobiz Outbound",
+            address=sip_domain,
+            numbers=[outbound_num] if outbound_num else [],
+            auth_username=sip_user,
+            auth_password=sip_password,
+        )
+
+        async with lkapi.LiveKitAPI(url=lk_url, api_key=lk_key, api_secret=lk_secret) as lk:
+            created = await lk.sip.create_sip_outbound_trunk(
+                CreateSIPOutboundTrunkRequest(trunk=trunk_info)
+            )
+            new_id = created.sip_trunk_id
+            logger.info("Created SIP outbound trunk: %s", new_id)
+
+            # Auto-update the env and persist to DB
+            os.environ["OUTBOUND_TRUNK_ID"] = new_id
+            await db.save_settings({"OUTBOUND_TRUNK_ID": new_id})
+
+            return {
+                "success": True,
+                "trunk_id": new_id,
+                "name": created.name,
+                "address": created.address,
+                "numbers": list(created.numbers),
+                "message": f"Trunk created and OUTBOUND_TRUNK_ID updated to {new_id}",
+            }
+    except Exception as exc:
+        logger.error("Failed to create SIP trunk: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/api/call/single")
 async def call_single(req: SingleCallRequest):
     try:
