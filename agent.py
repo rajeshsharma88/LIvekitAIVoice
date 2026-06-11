@@ -238,7 +238,11 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     )
 
     try:
-        await session.start(ctx.room, agent=Agent(instructions=system_prompt), room_input_options=input_opts)
+        await session.start(
+            agent=Agent(instructions=system_prompt),
+            room=ctx.room,
+            room_input_options=input_opts,
+        )
         await session.wait_for_disconnect()
     except Exception as exc:
         await _log("error", f"Session error for {phone}: {exc}", str(exc))
