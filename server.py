@@ -267,6 +267,16 @@ def _schedule_campaign(campaign: dict) -> None:
 async def startup() -> None:
     db.init_db()
     scheduler.start()
+    # Load settings from Supabase into env so OUTBOUND_TRUNK_ID etc. are available
+    try:
+        adb = await db._adb()
+        result = await adb.table("settings").select("key, value").execute()
+        for row in (result.data or []):
+            if row.get("value"):
+                os.environ[row["key"]] = row["value"]
+        logger.info("Loaded %d settings from Supabase", len(result.data or []))
+    except Exception as exc:
+        logger.warning("Could not load settings from Supabase: %s", exc)
     # Schedule all active campaigns
     try:
         campaigns = await db.get_all_campaigns()
