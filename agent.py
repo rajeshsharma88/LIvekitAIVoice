@@ -243,7 +243,18 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             room=ctx.room,
             room_input_options=input_opts,
         )
-        await session.wait_for_disconnect()
+        # Wait until the room disconnects
+        disconnect_event = asyncio.Event()
+
+        @ctx.room.on("disconnected")
+        def _on_disconnect(*args):
+            disconnect_event.set()
+
+        # If already disconnected, don't wait forever
+        if ctx.room.connection_state != rtc.ConnectionState.CONN_CONNECTED:
+            disconnect_event.set()
+
+        await disconnect_event.wait()
     except Exception as exc:
         await _log("error", f"Session error for {phone}: {exc}", str(exc))
         raise
