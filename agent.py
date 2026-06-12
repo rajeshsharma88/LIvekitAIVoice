@@ -196,6 +196,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     symptom = meta.get("symptom", "")
     sheet_row = meta.get("sheet_row")
     retry_count = int(meta.get("retry_count", 0))
+    source = meta.get("source", "")
 
     # Language: use pre-detected value from n8n meta, or detect from city
     language = meta.get("language") or detect_language(city)
@@ -226,6 +227,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         city=city,
         symptom=symptom,
         language=language,
+        source=source,
     )
     tools = tool_ctx.build_tool_list(enabled_tools)
 

@@ -7,6 +7,7 @@ from typing import Optional
 from livekit import agents, api
 from livekit.agents import llm
 
+from crm_callback import send_crm_callback
 from db import (
     log_call, log_error, log_order,
     get_calls_by_phone, get_orders_by_phone,
@@ -34,6 +35,7 @@ class SalesTools(llm.ToolContext):
         city: Optional[str] = None,
         symptom: Optional[str] = None,
         language: str = "hinglish",
+        source: str = "",
     ):
         self.ctx = ctx
         self.phone_number = phone_number
@@ -42,6 +44,7 @@ class SalesTools(llm.ToolContext):
         self.city = city
         self.symptom = symptom
         self.language = language
+        self.source = source
         self._call_start_time = time.time()
         self._sip_domain = os.getenv("VOBIZ_SIP_DOMAIN", "")
         super().__init__(tools=[])
@@ -147,6 +150,26 @@ class SalesTools(llm.ToolContext):
         outcome = f"ordered_{variant.replace(' ', '_').replace('-', '_').lower()}"
         await _log(f"Order booked: {self.phone_number} — {variant} ₹{amount}")
 
+        # Fire CRM callback (non-blocking)
+        asyncio.create_task(send_crm_callback(
+            phone=self.phone_number or "unknown",
+            outcome=outcome,
+            lead_name=self.lead_name,
+            notes=f"Order {order_id}: {variant} ₹{amount} COD to {full_address[:80]}",
+            raw={
+                "order_id": order_id,
+                "variant": variant,
+                "amount": amount,
+                "address": full_address,
+                "pincode": pincode,
+                "landmark": landmark,
+                "alt_phone": alt_phone,
+                "city": self.city or "",
+                "language": self.language,
+                "source": self.source,
+            },
+        ))
+
         return (
             f"Order confirmed! Order ID: {order_id}. "
             f"{variant} — ₹{amount} COD. "
@@ -230,6 +253,21 @@ class SalesTools(llm.ToolContext):
                 await update_row_status(self.sheet_row, sheet_status)
             except Exception as exc:
                 logger.error("Sheet status update failed: %s", exc)
+
+        # Fire CRM callback (non-blocking)
+        asyncio.create_task(send_crm_callback(
+            phone=self.phone_number or "unknown",
+            outcome=outcome,
+            lead_name=self.lead_name,
+            notes=reason,
+            raw={
+                "duration_seconds": duration,
+                "sheet_status": sheet_status,
+                "city": self.city or "",
+                "language": self.language,
+                "source": self.source,
+            },
+        ))
 
         try:
             await self.ctx.room.disconnect()

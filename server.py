@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import db
+from crm_callback import send_crm_callback
 from language import detect_language
 from prompts import DEFAULT_SYSTEM_PROMPT, build_prompt
 
@@ -717,6 +718,7 @@ async def call_webhook(req: N8nWebhookRequest):
         "sheet_row": req.sheet_row,
         "lead_id": req.lead_id,
         "retry_count": req.retry_count,
+        "source": req.source or "",
         "business_name": "Aarogya India",
         "service_type": "3A Piles Kit",
     }
@@ -734,6 +736,15 @@ async def call_webhook(req: N8nWebhookRequest):
         # Mark CRM lead as "ai_calling" so the dashboard shows live status
         if req.lead_id:
             await db.update_crm_lead_ai_status(req.lead_id, "ai_calling")
+
+        # Notify Lovable CRM that the call has been dispatched
+        await send_crm_callback(
+            phone=req.phone,
+            outcome="other",
+            lead_name=req.name,
+            notes="AI call dispatched",
+            raw={"source": req.source or "webhook", "status": "ai_calling"},
+        )
 
         await db.log_error(
             "webhook",
