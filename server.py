@@ -181,6 +181,23 @@ async def dispatch_call(
         raise ValueError(str(exc))
 
     await db.log_error("server", f"Call dispatched to {phone_number} in room {room_name}", "", "info")
+
+    # Notify Lovable CRM that the call has been dispatched (fires for ALL call paths)
+    try:
+        await send_crm_callback(
+            phone=phone_number,
+            outcome="other",
+            lead_name=lead_name,
+            notes="AI call dispatched",
+            raw={
+                "source": (extra_meta or {}).get("source", "dashboard"),
+                "status": "ai_calling",
+                "room": room_name,
+            },
+        )
+    except Exception:
+        pass  # CRM notification is best-effort, never block the call
+
     return {"room": room_name, "phone": phone_number, "status": "dispatched"}
 
 
@@ -736,15 +753,6 @@ async def call_webhook(req: N8nWebhookRequest):
         # Mark CRM lead as "ai_calling" so the dashboard shows live status
         if req.lead_id:
             await db.update_crm_lead_ai_status(req.lead_id, "ai_calling")
-
-        # Notify Lovable CRM that the call has been dispatched
-        await send_crm_callback(
-            phone=req.phone,
-            outcome="other",
-            lead_name=req.name,
-            notes="AI call dispatched",
-            raw={"source": req.source or "webhook", "status": "ai_calling"},
-        )
 
         await db.log_error(
             "webhook",
